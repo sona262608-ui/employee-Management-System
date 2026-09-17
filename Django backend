@@ -1,0 +1,504 @@
+```python
+# ============================================================
+# EMPLOYEE MANAGEMENT SYSTEM
+# Single File Django REST Backend
+# ============================================================
+
+import os
+import sys
+
+from django.conf import settings
+from django.core.management import execute_from_command_line
+from django.db import models
+from django.urls import path
+from django.http import JsonResponse
+from django.views.decorators.csrf import csrf_exempt
+
+import json
+
+
+# ============================================================
+# DJANGO SETTINGS
+# ============================================================
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+if not settings.configured:
+
+    settings.configure(
+
+        DEBUG=True,
+
+        SECRET_KEY="employee-management-secret-key",
+
+        ROOT_URLCONF=__name__,
+
+        ALLOWED_HOSTS=["*"],
+
+        INSTALLED_APPS=[
+            "django.contrib.contenttypes",
+            "django.contrib.auth",
+        ],
+
+        DATABASES={
+            "default": {
+                "ENGINE": "django.db.backends.sqlite3",
+                "NAME": os.path.join(
+                    BASE_DIR,
+                    "employees.db"
+                ),
+            }
+        },
+
+        MIDDLEWARE=[],
+
+        DEFAULT_AUTO_FIELD=
+            "django.db.models.BigAutoField",
+
+    )
+
+
+# ============================================================
+# EMPLOYEE MODEL
+# ============================================================
+
+class Employee(models.Model):
+
+    name = models.CharField(
+        max_length=100
+    )
+
+    email = models.EmailField(
+        unique=True
+    )
+
+    department = models.CharField(
+        max_length=50
+    )
+
+    position = models.CharField(
+        max_length=100
+    )
+
+    salary = models.DecimalField(
+        max_digits=10,
+        decimal_places=2
+    )
+
+    status = models.CharField(
+        max_length=20,
+        default="Active"
+    )
+
+    created_at = models.DateTimeField(
+        auto_now_add=True
+    )
+
+    class Meta:
+
+        app_label = "employees"
+
+
+# ============================================================
+# CONVERT EMPLOYEE TO JSON
+# ============================================================
+
+def employee_data(employee):
+
+    return {
+
+        "id": employee.id,
+
+        "name": employee.name,
+
+        "email": employee.email,
+
+        "department": employee.department,
+
+        "position": employee.position,
+
+        "salary": float(employee.salary),
+
+        "status": employee.status,
+
+        "created_at":
+            employee.created_at.strftime(
+                "%Y-%m-%d %H:%M:%S"
+            )
+
+    }
+
+
+# ============================================================
+# CORS HEADERS
+# ============================================================
+
+def cors_response(data, status=200):
+
+    response = JsonResponse(
+        data,
+        status=status
+    )
+
+    response["Access-Control-Allow-Origin"] = "*"
+
+    response["Access-Control-Allow-Methods"] = (
+        "GET, POST, PUT, DELETE, OPTIONS"
+    )
+
+    response["Access-Control-Allow-Headers"] = (
+        "Content-Type"
+    )
+
+    return response
+
+
+# ============================================================
+# EMPLOYEE API
+# ============================================================
+
+@csrf_exempt
+def employees_api(request):
+
+    # --------------------------------------------------------
+    # OPTIONS
+    # --------------------------------------------------------
+
+    if request.method == "OPTIONS":
+
+        response = JsonResponse({})
+
+        response["Access-Control-Allow-Origin"] = "*"
+
+        response["Access-Control-Allow-Methods"] = (
+            "GET, POST, PUT, DELETE, OPTIONS"
+        )
+
+        response["Access-Control-Allow-Headers"] = (
+            "Content-Type"
+        )
+
+        return response
+
+
+    # --------------------------------------------------------
+    # GET - READ ALL EMPLOYEES
+    # --------------------------------------------------------
+
+    if request.method == "GET":
+
+        employees = Employee.objects.all().order_by("-id")
+
+        data = [
+            employee_data(emp)
+            for emp in employees
+        ]
+
+        return cors_response(data)
+
+
+    # --------------------------------------------------------
+    # POST - CREATE EMPLOYEE
+    # --------------------------------------------------------
+
+    if request.method == "POST":
+
+        try:
+
+            data = json.loads(
+                request.body
+            )
+
+            name = data.get(
+                "name",
+                ""
+            ).strip()
+
+            email = data.get(
+                "email",
+                ""
+            ).strip()
+
+            department = data.get(
+                "department",
+                ""
+            ).strip()
+
+            position = data.get(
+                "position",
+                ""
+            ).strip()
+
+            salary = data.get(
+                "salary",
+                0
+            )
+
+            status = data.get(
+                "status",
+                "Active"
+            )
+
+
+            # Validation
+
+            if not name:
+
+                return cors_response(
+                    {
+                        "error":
+                        "Employee name is required"
+                    },
+                    400
+                )
+
+
+            if not email:
+
+                return cors_response(
+                    {
+                        "error":
+                        "Email is required"
+                    },
+                    400
+                )
+
+
+            if not department:
+
+                return cors_response(
+                    {
+                        "error":
+                        "Department is required"
+                    },
+                    400
+                )
+
+
+            if not position:
+
+                return cors_response(
+                    {
+                        "error":
+                        "Position is required"
+                    },
+                    400
+                )
+
+
+            if float(salary) <= 0:
+
+                return cors_response(
+                    {
+                        "error":
+                        "Salary must be greater than 0"
+                    },
+                    400
+                )
+
+
+            # Duplicate email
+
+            if Employee.objects.filter(
+                email=email
+            ).exists():
+
+                return cors_response(
+                    {
+                        "error":
+                        "Email already exists"
+                    },
+                    400
+                )
+
+
+            # Create employee
+
+            employee = Employee.objects.create(
+
+                name=name,
+
+                email=email,
+
+                department=department,
+
+                position=position,
+
+                salary=salary,
+
+                status=status
+
+            )
+
+
+            return cors_response(
+                employee_data(employee),
+                201
+            )
+
+
+        except Exception as error:
+
+            return cors_response(
+                {
+                    "error":
+                    str(error)
+                },
+                400
+            )
+
+
+    return cors_response(
+        {
+            "error":
+            "Method not allowed"
+        },
+        405
+    )
+
+
+# ============================================================
+# SINGLE EMPLOYEE API
+# ============================================================
+
+@csrf_exempt
+def employee_detail(request, employee_id):
+
+    # Find employee
+
+    try:
+
+        employee = Employee.objects.get(
+            id=employee_id
+        )
+
+    except Employee.DoesNotExist:
+
+        return cors_response(
+            {
+                "error":
+                "Employee not found"
+            },
+            404
+        )
+
+
+    # --------------------------------------------------------
+    # GET ONE EMPLOYEE
+    # --------------------------------------------------------
+
+    if request.method == "GET":
+
+        return cors_response(
+            employee_data(employee)
+        )
+
+
+    # --------------------------------------------------------
+    # PUT - UPDATE EMPLOYEE
+    # --------------------------------------------------------
+
+    if request.method == "PUT":
+
+        try:
+
+            data = json.loads(
+                request.body
+            )
+
+
+            name = data.get(
+                "name",
+                employee.name
+            ).strip()
+
+            email = data.get(
+                "email",
+                employee.email
+            ).strip()
+
+            department = data.get(
+                "department",
+                employee.department
+            ).strip()
+
+            position = data.get(
+                "position",
+                employee.position
+            ).strip()
+
+            salary = data.get(
+                "salary",
+                employee.salary
+            )
+
+            status = data.get(
+                "status",
+                employee.status
+            )
+
+
+            # Validation
+
+            if not name:
+
+                return cors_response(
+                    {
+                        "error":
+                        "Name is required"
+                    },
+                    400
+                )
+
+
+            if not email:
+
+                return cors_response(
+                    {
+                        "error":
+                        "Email is required"
+                    },
+                    400
+                )
+
+
+            if float(salary) <= 0:
+
+                return cors_response(
+                    {
+                        "error":
+                        "Salary must be greater than 0"
+                    },
+                    400
+                )
+
+
+            # Check duplicate email
+
+            if Employee.objects.filter(
+                email=email
+            ).exclude(
+                id=employee.id
+            ).exists():
+
+                return cors_response(
+                    {
+                        "error":
+                        "Email already exists"
+                    },
+                    400
+                )
+
+
+            # Update
+
+            employee.name = name
+
+            employee.email = email
+
+            employee.department = department
+
+            employee.position = position
+
+            employee.salary = salary
+```
